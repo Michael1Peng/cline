@@ -30,6 +30,7 @@ class VSCodeAPIWrapper {
 	 * @param message Abitrary data (must be JSON serializable) to send to the extension context.
 	 */
 	public postMessage(message: WebviewMessage) {
+		console.log('[debug] [vscode.ts] postMessage called with:', JSON.stringify(message)); // Stringify for better object logging
 		if (this.vsCodeApi) {
 			this.vsCodeApi.postMessage(message)
 		} else {

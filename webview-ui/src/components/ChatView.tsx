@@ -69,6 +69,7 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 		// basically as long as a task is active, the conversation history will be persisted
 
 		const lastMessage = messages.at(-1)
+		console.log('[debug] [ChatView] useEffect[messages] triggered. Last message:', JSON.stringify(lastMessage)); // Stringify for better object logging
 		if (lastMessage) {
 			switch (lastMessage.type) {
 				case "ask":
@@ -117,6 +118,7 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 							setSecondaryButtonText(undefined)
 							break
 					}
+					console.log('[debug] [ChatView] Processed ask message type:', lastMessage.ask);
 					break
 				case "say":
 					// don't want to reset since there could be a "say" after an "ask" while ask is waiting for response
@@ -159,10 +161,12 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	}, [messages.length])
 
 	const handleSendMessage = () => {
+		console.log('[debug] [ChatView] handleSendMessage called. inputValue:', inputValue, 'messages.length:', messages.length, 'claudeAsk:', claudeAsk);
 		const text = inputValue.trim()
 		if (text) {
 			if (messages.length === 0) {
 				vscode.postMessage({ type: "newTask", text })
+				console.log('[debug] [ChatView] Sending newTask message:', { type: 'newTask', text });
 			} else if (claudeAsk) {
 				switch (claudeAsk) {
 					case "followup":
@@ -170,6 +174,7 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 					case "command": // user can provide feedback to a tool or command use
 					case "completion_result": // if this happens then the user has feedback for the completion result
 						vscode.postMessage({ type: "askResponse", askResponse: "textResponse", text })
+						console.log('[debug] [ChatView] Sending askResponse (textResponse) message:', { type: 'askResponse', askResponse: 'textResponse', text });
 						break
 					// there is no other case that a textfield should be enabled
 				}
@@ -187,16 +192,19 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	This logic depends on the useEffect[messages] above to set claudeAsk, after which buttons are shown and we then send an askResponse to the extension.
 	*/
 	const handlePrimaryButtonClick = () => {
+		console.log('[debug] [ChatView] handlePrimaryButtonClick called. claudeAsk:', claudeAsk);
 		switch (claudeAsk) {
 			case "request_limit_reached":
 			case "api_req_failed":
 			case "command":
 			case "tool":
 				vscode.postMessage({ type: "askResponse", askResponse: "yesButtonTapped" })
+				console.log('[debug] [ChatView] Sending askResponse (yesButtonTapped) message:', { type: 'askResponse', askResponse: 'yesButtonTapped' });
 				break
 			case "completion_result":
 				// extension waiting for feedback. but we can just present a new task button
 				startNewTask()
+				console.log('[debug] [ChatView] Primary button clicked for completion_result, starting new task.');
 				break
 		}
 		setTextAreaDisabled(true)
@@ -207,15 +215,18 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	}
 
 	const handleSecondaryButtonClick = () => {
+		console.log('[debug] [ChatView] handleSecondaryButtonClick called. claudeAsk:', claudeAsk);
 		switch (claudeAsk) {
 			case "request_limit_reached":
 			case "api_req_failed":
 				startNewTask()
+				console.log('[debug] [ChatView] Secondary button clicked for limit/failed, starting new task.');
 				break
 			case "command":
 			case "tool":
 				// responds to the API with a "This operation failed" and lets it try again
 				vscode.postMessage({ type: "askResponse", askResponse: "noButtonTapped" })
+				console.log('[debug] [ChatView] Sending askResponse (noButtonTapped) message:', { type: 'askResponse', askResponse: 'noButtonTapped' });
 				break
 		}
 		setTextAreaDisabled(true)
@@ -237,11 +248,14 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	}
 
 	const startNewTask = () => {
+		console.log('[debug] [ChatView] startNewTask called.');
 		vscode.postMessage({ type: "clearTask" })
+		console.log('[debug] [ChatView] Sending clearTask message.');
 	}
 
 	const handleMessage = useCallback(
 		(e: MessageEvent) => {
+			console.log('[debug] [ChatView] Received message from extension:', e.data);
 			const message: ExtensionMessage = e.data
 			switch (message.type) {
 				case "action":

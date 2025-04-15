@@ -54,6 +54,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 		//context: vscode.WebviewViewResolveContext<unknown>, used to recreate a deallocated webview, but we don't need this since we use retainContextWhenHidden
 		//token: vscode.CancellationToken
 	): void | Thenable<void> {
+		console.log('[debug] [ClaudeDevProvider] resolveWebviewView called.');
 		this.outputChannel.appendLine("Resolving webview view")
 		this.view = webviewView
 
@@ -130,6 +131,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 	}
 
 	async tryToInitClaudeDevWithTask(task: string) {
+		console.log(`[ClaudeDevProvider] tryToInitClaudeDevWithTask called. Task: "${task}"`);
 		await this.clearTask() // ensures that an exising task doesn't exist before starting a new one, although this shouldn't be possible since user must clear task before starting a new one
 		const [apiKey, maxRequestsPerTask] = await Promise.all([
 			this.getSecret("apiKey") as Promise<string | undefined>,
@@ -137,11 +139,13 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 		])
 		if (this.view && apiKey) {
 			this.claudeDev = new ClaudeDev(this, task, apiKey, maxRequestsPerTask)
+			console.log('[debug] [ClaudeDevProvider] ClaudeDev instance created.');
 		}
 	}
 
 	// Send any JSON serializable data to the react app
 	async postMessageToWebview(message: ExtensionMessage) {
+		console.log('[debug] [ClaudeDevProvider] Posting message to webview:', JSON.stringify(message)); // Stringify for better object logging
 		await this.view?.webview.postMessage(message)
 	}
 
@@ -193,14 +197,14 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 
 		// Use a nonce to only allow a specific script to be run.
 		/*
-        content security policy of your webview to only allow scripts that have a specific nonce
-        create a content security policy meta tag so that only loading scripts with a nonce is allowed
-        As your extension grows you will likely want to add custom styles, fonts, and/or images to your webview. If you do, you will need to update the content security policy meta tag to explicity allow for these resources. E.g.
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; img-src ${webview.cspSource} https:; script-src 'nonce-${nonce}';">
+		content security policy of your webview to only allow scripts that have a specific nonce
+		create a content security policy meta tag so that only loading scripts with a nonce is allowed
+		As your extension grows you will likely want to add custom styles, fonts, and/or images to your webview. If you do, you will need to update the content security policy meta tag to explicity allow for these resources. E.g.
+				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; img-src ${webview.cspSource} https:; script-src 'nonce-${nonce}';">
 
 
-        in meta tag we add nonce attribute: A cryptographic nonce (only used once) to allow scripts. The server must generate a unique nonce value each time it transmits a policy. It is critical to provide a nonce that cannot be guessed as bypassing a resource's policy is otherwise trivial.
-        */
+		in meta tag we add nonce attribute: A cryptographic nonce (only used once) to allow scripts. The server must generate a unique nonce value each time it transmits a policy. It is critical to provide a nonce that cannot be guessed as bypassing a resource's policy is otherwise trivial.
+		*/
 		const nonce = getNonce()
 
 		// Tip: Install the es6-string-html VS Code extension to enable code highlighting below
@@ -232,13 +236,16 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 	 * @param webview A reference to the extension webview
 	 */
 	private setWebviewMessageListener(webview: vscode.Webview) {
+		console.log('[debug] [ClaudeDevProvider] Setting up webview message listener.');
 		webview.onDidReceiveMessage(
 			async (message: WebviewMessage) => {
+				console.log('[debug] [ClaudeDevProvider] Received message from webview:', JSON.stringify(message)); // Stringify for better object logging
 				switch (message.type) {
 					case "webviewDidLaunch":
 						await this.postStateToWebview()
 						break
 					case "newTask":
+						console.log(`[ClaudeDevProvider] Received 'newTask' message. Task: "${message.text}". Initializing ClaudeDev...`);
 						// Code that should run in response to the hello message command
 						//vscode.window.showInformationMessage(message.text!)
 
@@ -267,6 +274,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 						await this.postStateToWebview()
 						break
 					case "askResponse":
+						console.log(`[ClaudeDevProvider] Received 'askResponse'. Response type: ${message.askResponse}, Text provided: ${!!message.text}`);
 						this.claudeDev?.handleWebviewAskResponse(message.askResponse!, message.text)
 						break
 					case "clearTask":
@@ -288,6 +296,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 	}
 
 	async postStateToWebview() {
+		console.log('[debug] [ClaudeDevProvider] Posting state to webview.');
 		const [apiKey, maxRequestsPerTask, claudeMessages, lastShownAnnouncementId] = await Promise.all([
 			this.getSecret("apiKey") as Promise<string | undefined>,
 			this.getGlobalState("maxRequestsPerTask") as Promise<number | undefined>,
@@ -307,6 +316,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 	}
 
 	async clearTask() {
+		console.log('[debug] [ClaudeDevProvider] clearTask called.');
 		if (this.claudeDev) {
 			this.claudeDev.abort = true // will stop any agentically running promises
 			this.claudeDev = undefined // removes reference to it, so once promises end it will be garbage collected
@@ -350,6 +360,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 	}
 
 	async addClaudeMessage(message: ClaudeMessage): Promise<ClaudeMessage[]> {
+		console.log(`[ClaudeDevProvider] Adding Claude message: type=${message.type}, ts=${message.ts}`);
 		const messages = await this.getClaudeMessages()
 		messages.push(message)
 		await this.setClaudeMessages(messages)
@@ -370,6 +381,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 	}
 
 	async addMessageToApiConversationHistory(message: Anthropic.MessageParam): Promise<Anthropic.MessageParam[]> {
+		console.log(`[ClaudeDevProvider] Adding message to API history: role=${message.role}`);
 		const history = await this.getApiConversationHistory()
 		history.push(message)
 		await this.setApiConversationHistory(history)
