@@ -1,9 +1,9 @@
 // See https://go.microsoft.com/fwlink/?LinkId=733558
 // for the documentation about the tasks.json format
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
+    "version": "2.0.0",
+    "tasks": [
+        {
             "label": "watch",
             "dependsOn": [
                 "npm: build:webview",
@@ -15,7 +15,7 @@
             },
             "group": {
                 "kind": "build",
-                "isDefault": true
+                "isDefault": false // <-- Changed from true
             }
         },
         {
@@ -34,7 +34,7 @@
             "type": "npm",
             "script": "watch:esbuild",
             "group": "build",
-            "problemMatcher": "$esbuild-watch",
+            // "problemMatcher": "$esbuild-watch",
             "isBackground": true,
             "label": "npm: watch:esbuild",
             "presentation": {
@@ -42,7 +42,7 @@
                 "reveal": "never"
             }
         },
-		{
+        {
             "type": "npm",
             "script": "watch:tsc",
             "group": "build",
@@ -54,24 +54,39 @@
                 "reveal": "never"
             }
         },
-		{
-			"type": "npm",
-			"script": "watch-tests",
-			"problemMatcher": "$tsc-watch",
-			"isBackground": true,
-			"presentation": {
-				"reveal": "never",
-				"group": "watchers"
-			},
-			"group": "build"
-		},
-		{
-			"label": "tasks: watch-tests",
-			"dependsOn": [
-				"npm: watch",
-				"npm: watch-tests"
-			],
-			"problemMatcher": []
-		}
-	]
+        {
+            "type": "npm",
+            "script": "watch-tests",
+            "problemMatcher": "$tsc-watch",
+            "isBackground": true,
+            "presentation": {
+                "reveal": "never",
+                "group": "watchers"
+            },
+            "group": "build"
+        },
+        {
+            "label": "tasks: watch-tests",
+            "dependsOn": [
+                "npm: watch",
+                "npm: watch-tests"
+            ],
+            "problemMatcher": []
+        }, // <-- Added comma here
+        { // <-- Added new task for compile
+            "type": "npm",
+            "script": "compile",
+            "label": "npm: compile",
+            "detail": "npm run check-types && npm run lint && node esbuild.js",
+            "problemMatcher": [
+                "$tsc", // For check-types
+                "$eslint-compact" // For lint
+                // Note: esbuild errors might not be caught here without a custom matcher
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true // <-- Set this as the default build task
+            }
+        }
+    ] // <-- Moved closing bracket here
 }
