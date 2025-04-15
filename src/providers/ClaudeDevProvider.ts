@@ -29,6 +29,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 		private readonly context: vscode.ExtensionContext,
 		private readonly outputChannel: vscode.OutputChannel
 	) {
+		console.log("[ClaudeDevProvider:constructor] Instantiating ClaudeDevProvider");
 		this.outputChannel.appendLine("ClaudeDevProvider instantiated")
 	}
 
@@ -38,6 +39,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 	- https://github.com/microsoft/vscode-extension-samples/blob/main/webview-sample/src/extension.ts
 	*/
 	async dispose() {
+		console.log("[ClaudeDevProvider:dispose] Disposing ClaudeDevProvider");
 		this.outputChannel.appendLine("Disposing ClaudeDevProvider...")
 		await this.clearTask()
 		this.outputChannel.appendLine("Cleared task")
@@ -59,6 +61,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 		//context: vscode.WebviewViewResolveContext<unknown>, used to recreate a deallocated webview, but we don't need this since we use retainContextWhenHidden
 		//token: vscode.CancellationToken
 	): void | Thenable<void> {
+		console.log("[ClaudeDevProvider:resolveWebviewView] Resolving webview view");
 		this.outputChannel.appendLine("Resolving webview view")
 		this.view = webviewView
 
@@ -135,6 +138,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 	}
 
 	async initClaudeDevWithTask(task: string) {
+		console.log(`[debug] [ClaudeDevProvider:initClaudeDevWithTask] Initializing ClaudeDev with task: ${task}`);
 		await this.clearTask() // ensures that an exising task doesn't exist before starting a new one, although this shouldn't be possible since user must clear task before starting a new one
 		const { apiProvider, apiKey, openRouterApiKey, awsAccessKey, awsSecretKey, awsRegion, maxRequestsPerTask } =
 			await this.getState()
@@ -148,6 +152,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 
 	// Send any JSON serializable data to the react app
 	async postMessageToWebview(message: ExtensionMessage) {
+		console.log(`[debug] [ClaudeDevProvider:postMessageToWebview] Posting message: ${JSON.stringify(message)}`);
 		await this.view?.webview.postMessage(message)
 	}
 
@@ -238,13 +243,17 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 	 * @param webview A reference to the extension webview
 	 */
 	private setWebviewMessageListener(webview: vscode.Webview) {
+		console.log("[ClaudeDevProvider:setWebviewMessageListener] Setting up webview message listener");
 		webview.onDidReceiveMessage(
 			async (message: WebviewMessage) => {
+				console.log(`[debug] [ClaudeDevProvider:onDidReceiveMessage] Received message type: ${message.type}`);
 				switch (message.type) {
 					case "webviewDidLaunch":
+						console.log("[ClaudeDevProvider:onDidReceiveMessage:webviewDidLaunch] Webview launched, posting initial state.");
 						await this.postStateToWebview()
 						break
 					case "newTask":
+						console.log(`[debug] [ClaudeDevProvider:onDidReceiveMessage:newTask] Received new task: ${message.text}`);
 						// Code that should run in response to the hello message command
 						//vscode.window.showInformationMessage(message.text!)
 
@@ -256,6 +265,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 						await this.initClaudeDevWithTask(message.text!)
 						break
 					case "apiConfiguration":
+						console.log(`[debug] [ClaudeDevProvider:onDidReceiveMessage:apiConfiguration] Received API configuration: ${JSON.stringify(message.apiConfiguration)}`);
 						if (message.apiConfiguration) {
 							const { apiProvider, apiKey, openRouterApiKey, awsAccessKey, awsSecretKey, awsRegion } =
 								message.apiConfiguration
@@ -270,6 +280,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 						await this.postStateToWebview()
 						break
 					case "maxRequestsPerTask":
+						console.log(`[debug] [ClaudeDevProvider:onDidReceiveMessage:maxRequestsPerTask] Received maxRequestsPerTask: ${message.text}`);
 						let result: number | undefined = undefined
 						if (message.text && message.text.trim()) {
 							const num = Number(message.text)
@@ -282,18 +293,22 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 						await this.postStateToWebview()
 						break
 					case "askResponse":
+						console.log(`[debug] [ClaudeDevProvider:onDidReceiveMessage:askResponse] Received ask response: ${message.askResponse}, text: ${message.text}`);
 						this.claudeDev?.handleWebviewAskResponse(message.askResponse!, message.text)
 						break
 					case "clearTask":
+						console.log("[ClaudeDevProvider:onDidReceiveMessage:clearTask] Received clear task request.");
 						// newTask will start a new task with a given task text, while clear task resets the current session and allows for a new task to be started
 						await this.clearTask()
 						await this.postStateToWebview()
 						break
 					case "didShowAnnouncement":
+						console.log("[ClaudeDevProvider:onDidReceiveMessage:didShowAnnouncement] Announcement shown.");
 						await this.updateGlobalState("lastShownAnnouncementId", this.latestAnnouncementId)
 						await this.postStateToWebview()
 						break
 					case "downloadTask":
+						console.log("[ClaudeDevProvider:onDidReceiveMessage:downloadTask] Received download task request.");
 						this.downloadTask()
 						break
 					// Add more switch case statements here as more webview message commands
@@ -306,6 +321,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 	}
 
 	async downloadTask() {
+		console.log("[ClaudeDevProvider:downloadTask] Starting task download process.");
 		// File name
 		const date = new Date()
 		const month = date.toLocaleString("en-US", { month: "short" }).toLowerCase()
@@ -405,6 +421,7 @@ export class ClaudeDevProvider implements vscode.WebviewViewProvider {
 	}
 
 	async clearTask() {
+		console.log("[ClaudeDevProvider:clearTask] Clearing current task.");
 		if (this.claudeDev) {
 			this.claudeDev.abort = true // will stop any agentically running promises
 			this.claudeDev = undefined // removes reference to it, so once promises end it will be garbage collected

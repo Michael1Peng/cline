@@ -244,6 +244,7 @@ export class ClaudeDev {
 		apiConfiguration: ApiConfiguration,
 		maxRequestsPerTask?: number
 	) {
+		console.log(`[debug] [ClaudeDev:constructor] Initializing ClaudeDev. Task: ${task}, API Config: ${JSON.stringify(apiConfiguration)}, Max Requests: ${maxRequestsPerTask}`);
 		this.providerRef = new WeakRef(provider)
 		this.api = buildApiHandler(apiConfiguration)
 		this.maxRequestsPerTask = maxRequestsPerTask ?? DEFAULT_MAX_REQUESTS_PER_TASK
@@ -252,21 +253,26 @@ export class ClaudeDev {
 	}
 
 	updateApi(apiConfiguration: ApiConfiguration) {
+		console.log(`[debug] [ClaudeDev:updateApi] Updating API configuration: ${JSON.stringify(apiConfiguration)}`);
 		this.api = buildApiHandler(apiConfiguration)
 	}
 
 	updateMaxRequestsPerTask(maxRequestsPerTask: number | undefined) {
+		console.log(`[debug] [ClaudeDev:updateMaxRequestsPerTask] Updating max requests per task: ${maxRequestsPerTask}`);
 		this.maxRequestsPerTask = maxRequestsPerTask ?? DEFAULT_MAX_REQUESTS_PER_TASK
 	}
 
 	async handleWebviewAskResponse(askResponse: ClaudeAskResponse, text?: string) {
+		console.log(`[debug] [ClaudeDev:handleWebviewAskResponse] Handling webview ask response: ${askResponse}, Text: ${text}`);
 		this.askResponse = askResponse
 		this.askResponseText = text
 	}
 
 	async ask(type: ClaudeAsk, question: string): Promise<{ response: ClaudeAskResponse; text?: string }> {
+		console.log(`[debug] [ClaudeDev:ask] Asking user. Type: ${type}, Question: ${question}`);
 		// If this ClaudeDev instance was aborted by the provider, then the only thing keeping us alive is a promise still running in the background, in which case we don't want to send its result to the webview as it is attached to a new instance of ClaudeDev now. So we can safely ignore the result of any active promises, and this class will be deallocated. (Although we set claudeDev = undefined in provider, that simply removes the reference to this instance, but the instance is still alive until this promise resolves or rejects.)
 		if (this.abort) {
+			console.log('[ClaudeDev:ask] Abort signal received, throwing error.');
 			throw new Error("ClaudeDev instance aborted")
 		}
 		this.askResponse = undefined
@@ -277,6 +283,7 @@ export class ClaudeDev {
 		await this.providerRef.deref()?.postStateToWebview()
 		await pWaitFor(() => this.askResponse !== undefined || this.lastMessageTs !== askTs, { interval: 100 })
 		if (this.lastMessageTs !== askTs) {
+			console.log('[ClaudeDev:ask] Ask promise ignored (likely superseded by another message).');
 			throw new Error("Current ask promise was ignored") // could happen if we send multiple asks in a row i.e. with command_output. It's important that when we know an ask could fail, it is handled gracefully
 		}
 		const result = { response: this.askResponse!, text: this.askResponseText }
@@ -286,7 +293,9 @@ export class ClaudeDev {
 	}
 
 	async say(type: ClaudeSay, text?: string): Promise<undefined> {
+		console.log(`[debug] [ClaudeDev:say] Sending message to webview. Type: ${type}, Text: ${text}`);
 		if (this.abort) {
+			console.log('[ClaudeDev:say] Abort signal received, throwing error.');
 			throw new Error("ClaudeDev instance aborted")
 		}
 		const sayTs = Date.now()
@@ -296,6 +305,7 @@ export class ClaudeDev {
 	}
 
 	private async startTask(task: string): Promise<void> {
+		console.log(`[debug] [ClaudeDev:startTask] Starting task: ${task}`);
 		// conversationHistory (for API) and claudeMessages (for webview) need to be in sync
 		// if the extension process were killed, then on restart the claudeMessages might not be empty, so we need to set it to [] when we create a new ClaudeDev client (otherwise webview would show stale messages from previous session)
 		this.claudeMessages = []
@@ -314,6 +324,7 @@ export class ClaudeDev {
 		let totalOutputTokens = 0
 
 		while (this.requestCount < this.maxRequestsPerTask) {
+			console.log(`[debug] [ClaudeDev:startTask] Entering recursive loop. Request count: ${this.requestCount}`);
 			const { didEndLoop, inputTokens, outputTokens } = await this.recursivelyMakeClaudeRequests([
 				{ type: "text", text: userPrompt },
 			])
@@ -325,9 +336,11 @@ export class ClaudeDev {
 
 			//const totalCost = this.calculateApiCost(totalInputTokens, totalOutputTokens)
 			if (didEndLoop) {
+				console.log('[ClaudeDev:startTask] Loop ended (attempt_completion or max requests reached).');
 				//this.say("task_completed", `Task completed. Total API usage cost: ${totalCost}`)
 				break
 			} else {
+				console.log('[ClaudeDev:startTask] Loop iteration finished without completion, forcing continuation.');
 				// this.say(
 				// 	"tool",
 				// 	"Claude responded with only text blocks but has not called attempt_completion yet. Forcing him to continue with task..."
@@ -339,6 +352,7 @@ export class ClaudeDev {
 	}
 
 	async executeTool(toolName: ToolName, toolInput: any, isLastWriteToFile: boolean = false): Promise<string> {
+		console.log(`[debug] [ClaudeDev:executeTool] Executing tool: ${toolName}, Input: ${JSON.stringify(toolInput)}, IsLastWrite: ${isLastWriteToFile}`);
 		switch (toolName) {
 			case "write_to_file":
 				return this.writeToFile(toolInput.path, toolInput.content, isLastWriteToFile)
@@ -357,6 +371,7 @@ export class ClaudeDev {
 			case "attempt_completion":
 				return this.attemptCompletion(toolInput.result, toolInput.command)
 			default:
+				console.error(`[ClaudeDev:executeTool] Unknown tool encountered: ${toolName}`);
 				return `Unknown tool: ${toolName}`
 		}
 	}
@@ -372,6 +387,7 @@ export class ClaudeDev {
 	}
 
 	async writeToFile(filePath: string, newContent: string, isLast: boolean): Promise<string> {
+		console.log(`[debug] [ClaudeDev:writeToFile] Writing to file: ${filePath}, IsLast: ${isLast}`);
 		try {
 			const fileExists = await fs
 				.access(filePath)
@@ -419,16 +435,19 @@ export class ClaudeDev {
 					} as ClaudeSayTool)
 				)
 				if (response !== "yesButtonTapped") {
+					console.log(`[debug] [ClaudeDev:writeToFile] User denied write operation for existing file: ${filePath}`);
 					if (isLast) {
 						await this.closeDiffViews()
 					}
 					if (response === "textResponse" && text) {
 						await this.say("user_feedback", text)
+						console.log(`[debug] [ClaudeDev:writeToFile] User provided feedback: ${text}`);
 						return `The user denied this operation and provided the following feedback:\n\"${text}\"`
 					}
 					return "The user denied this operation."
 				}
 				await fs.writeFile(filePath, newContent)
+				console.log(`[debug] [ClaudeDev:writeToFile] Applying changes to existing file: ${filePath}`);
 				// Finish by opening the edited file in the editor
 				await vscode.window.showTextDocument(vscode.Uri.file(filePath), { preview: false })
 				if (isLast) {
@@ -452,16 +471,19 @@ export class ClaudeDev {
 					JSON.stringify({ tool: "newFileCreated", path: filePath, content: newContent } as ClaudeSayTool)
 				)
 				if (response !== "yesButtonTapped") {
+					console.log(`[debug] [ClaudeDev:writeToFile] User denied write operation for new file: ${filePath}`);
 					if (isLast) {
 						await this.closeDiffViews()
 					}
 					if (response === "textResponse" && text) {
 						await this.say("user_feedback", text)
+						console.log(`[debug] [ClaudeDev:writeToFile] User provided feedback: ${text}`);
 						return `The user denied this operation and provided the following feedback:\n\"${text}\"`
 					}
 					return "The user denied this operation."
 				}
 				await fs.mkdir(path.dirname(filePath), { recursive: true })
+				console.log(`[debug] [ClaudeDev:writeToFile] Creating new file: ${filePath}`);
 				await fs.writeFile(filePath, newContent)
 				await vscode.window.showTextDocument(vscode.Uri.file(filePath), { preview: false })
 				if (isLast) {
@@ -477,6 +499,7 @@ export class ClaudeDev {
 	}
 
 	async closeDiffViews() {
+		console.log('[ClaudeDev:closeDiffViews] Closing active diff views.');
 		const tabs = vscode.window.tabGroups.all
 			.map((tg) => tg.tabs)
 			.flat()
@@ -490,6 +513,7 @@ export class ClaudeDev {
 	}
 
 	async readFile(filePath: string): Promise<string> {
+		console.log(`[debug] [ClaudeDev:readFile] Reading file: ${filePath}`);
 		try {
 			const content = await fs.readFile(filePath, "utf-8")
 			const { response, text } = await this.ask(
@@ -497,8 +521,10 @@ export class ClaudeDev {
 				JSON.stringify({ tool: "readFile", path: filePath, content } as ClaudeSayTool)
 			)
 			if (response !== "yesButtonTapped") {
+				console.log(`[debug] [ClaudeDev:readFile] User denied read operation for file: ${filePath}`);
 				if (response === "textResponse" && text) {
 					await this.say("user_feedback", text)
+					console.log(`[debug] [ClaudeDev:readFile] User provided feedback: ${text}`);
 					return `The user denied this operation and provided the following feedback:\n\"${text}\"`
 				}
 				return "The user denied this operation."
@@ -506,12 +532,14 @@ export class ClaudeDev {
 			return content
 		} catch (error) {
 			const errorString = `Error reading file: ${JSON.stringify(serializeError(error))}`
+			console.error(`[ClaudeDev:readFile] Error reading file ${filePath}: ${errorString}`);
 			this.say("error", `Error reading file:\n${error.message ?? JSON.stringify(serializeError(error), null, 2)}`)
 			return errorString
 		}
 	}
 
 	async listFilesTopLevel(dirPath: string): Promise<string> {
+		console.log(`[debug] [ClaudeDev:listFilesTopLevel] Listing top-level files in: ${dirPath}`);
 		try {
 			const files = await listFiles(dirPath, false)
 			const result = this.formatFilesList(dirPath, files)
@@ -535,11 +563,13 @@ export class ClaudeDev {
 					error.message ?? JSON.stringify(serializeError(error), null, 2)
 				}`
 			)
+			console.error(`[ClaudeDev:listFilesTopLevel] Error listing files in ${dirPath}: ${errorString}`);
 			return errorString
 		}
 	}
 
 	async listFilesRecursive(dirPath: string): Promise<string> {
+		console.log(`[debug] [ClaudeDev:listFilesRecursive] Listing files recursively in: ${dirPath}`);
 		try {
 			const files = await listFiles(dirPath, true)
 			const result = this.formatFilesList(dirPath, files)
@@ -561,6 +591,7 @@ export class ClaudeDev {
 				"error",
 				`Error listing files recursively:\n${error.message ?? JSON.stringify(serializeError(error), null, 2)}`
 			)
+			console.error(`[ClaudeDev:listFilesRecursive] Error listing files recursively in ${dirPath}: ${errorString}`);
 			return errorString
 		}
 	}
@@ -592,6 +623,7 @@ export class ClaudeDev {
 	}
 
 	async viewSourceCodeDefinitionsTopLevel(dirPath: string): Promise<string> {
+		console.log(`[debug] [ClaudeDev:viewSourceCodeDefinitionsTopLevel] Viewing source code definitions in: ${dirPath}`);
 		try {
 			const result = await parseSourceCodeForDefinitionsTopLevel(dirPath)
 			const { response, text } = await this.ask(
@@ -618,11 +650,13 @@ export class ClaudeDev {
 					error.message ?? JSON.stringify(serializeError(error), null, 2)
 				}`
 			)
+			console.error(`[ClaudeDev:viewSourceCodeDefinitionsTopLevel] Error viewing definitions in ${dirPath}: ${errorString}`);
 			return errorString
 		}
 	}
 
 	async executeCommand(command: string, returnEmptyStringOnSuccess: boolean = false): Promise<string> {
+		console.log(`[debug] [ClaudeDev:executeCommand] Executing command: ${command}`);
 		const { response, text } = await this.ask("command", command)
 		if (response !== "yesButtonTapped") {
 			if (response === "textResponse" && text) {
@@ -641,11 +675,13 @@ export class ClaudeDev {
 			try {
 				for await (const chunk of subprocess) {
 					const line = chunk.toString()
+					console.log(`[debug] [ClaudeDev:executeCommand] User denied command execution: ${command}`);
 					// stream output to user in realtime
 					// do not await as we are not waiting for a response
 					this.ask("command_output", line)
 						.then(({ response, text }) => {
 							// if this ask promise is not ignored, that means the user responded to it somehow either by clicking primary button or by typing text
+							console.log(`[debug] [ClaudeDev:executeCommand] User provided feedback: ${text}`);
 							if (response === "yesButtonTapped") {
 								// SIGINT is typically what's sent when a user interrupts a process (like pressing Ctrl+C)
 								/*
@@ -686,18 +722,21 @@ export class ClaudeDev {
 			const error = e as any
 			let errorMessage = error.message || JSON.stringify(serializeError(error), null, 2)
 			const errorString = `Error executing command:\n${errorMessage}`
+			console.error(`[ClaudeDev:executeCommand] Error executing command '${command}': ${errorString}`);
 			this.say("error", `Error executing command:\n${errorMessage}`) // TODO: in webview show code block for command errors
 			return errorString
 		}
 	}
 
 	async askFollowupQuestion(question: string): Promise<string> {
+		console.log(`[debug] [ClaudeDev:askFollowupQuestion] Asking followup question: ${question}`);
 		const { text } = await this.ask("followup", question)
 		await this.say("user_feedback", text ?? "")
 		return `User's response:\n\"${text}\"`
 	}
 
 	async attemptCompletion(result: string, command?: string): Promise<string> {
+		console.log(`[debug] [ClaudeDev:attemptCompletion] Attempting completion. Result: ${result}, Command: ${command}`);
 		let resultToSend = result
 		if (command) {
 			await this.say("completion_result", resultToSend)
@@ -718,6 +757,7 @@ export class ClaudeDev {
 	}
 
 	async attemptApiRequest(): Promise<Anthropic.Messages.Message> {
+		console.log(`[debug] [ClaudeDev:attemptApiRequest] Attempting API request. History length: ${this.apiConversationHistory.length}`);
 		try {
 			return await this.api.createMessage(SYSTEM_PROMPT(), this.apiConversationHistory, tools)
 		} catch (error) {
@@ -727,6 +767,7 @@ export class ClaudeDev {
 			)
 			if (response !== "yesButtonTapped") {
 				// this will never happen since if noButtonTapped, we will clear current task, aborting this instance
+			console.error(`[ClaudeDev:attemptApiRequest] API request failed: ${JSON.stringify(serializeError(error))}`);
 				throw new Error("API request failed")
 			}
 			await this.say("api_req_retried")
@@ -742,6 +783,7 @@ export class ClaudeDev {
 			| Anthropic.ToolResultBlockParam
 		>
 	): Promise<ClaudeRequestResult> {
+		console.log(`[debug] [ClaudeDev:recursivelyMakeClaudeRequests] Starting recursive request. Request count: ${this.requestCount}, User content length: ${userContent.length}`);
 		if (this.abort) {
 			throw new Error("ClaudeDev instance aborted")
 		}

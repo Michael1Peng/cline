@@ -14,11 +14,14 @@ class VSCodeAPIWrapper {
 	private readonly vsCodeApi: WebviewApi<unknown> | undefined
 
 	constructor() {
+		console.log('[VSCodeAPIWrapper:constructor] Initializing VSCodeAPIWrapper.');
 		// Check if the acquireVsCodeApi function exists in the current development
 		// context (i.e. VS Code development window or web browser)
 		if (typeof acquireVsCodeApi === "function") {
+			console.log('[VSCodeAPIWrapper:constructor] acquireVsCodeApi found, using VS Code API.');
 			this.vsCodeApi = acquireVsCodeApi()
 		}
+			console.log('[VSCodeAPIWrapper:constructor] acquireVsCodeApi not found, using browser mocks.');
 	}
 
 	/**
@@ -30,9 +33,12 @@ class VSCodeAPIWrapper {
 	 * @param message Abitrary data (must be JSON serializable) to send to the extension context.
 	 */
 	public postMessage(message: WebviewMessage) {
+		console.log(`[debug] [VSCodeAPIWrapper:postMessage] Posting message: ${JSON.stringify(message)}`);
 		if (this.vsCodeApi) {
+			console.log('[VSCodeAPIWrapper:postMessage] Using vsCodeApi.postMessage.');
 			this.vsCodeApi.postMessage(message)
 		} else {
+			console.log('[VSCodeAPIWrapper:postMessage] Using console.log (browser mock).');
 			console.log(message)
 		}
 	}
@@ -46,9 +52,12 @@ class VSCodeAPIWrapper {
 	 * @return The current state or `undefined` if no state has been set.
 	 */
 	public getState(): unknown | undefined {
+		console.log('[VSCodeAPIWrapper:getState] Getting state.');
 		if (this.vsCodeApi) {
+			console.log('[VSCodeAPIWrapper:getState] Using vsCodeApi.getState.');
 			return this.vsCodeApi.getState()
 		} else {
+			console.log('[VSCodeAPIWrapper:getState] Using localStorage.getItem (browser mock).');
 			const state = localStorage.getItem("vscodeState")
 			return state ? JSON.parse(state) : undefined
 		}
@@ -66,9 +75,12 @@ class VSCodeAPIWrapper {
 	 * @return The new state.
 	 */
 	public setState<T extends unknown | undefined>(newState: T): T {
+		console.log(`[debug] [VSCodeAPIWrapper:setState] Setting state: ${JSON.stringify(newState)}`);
 		if (this.vsCodeApi) {
+			console.log('[VSCodeAPIWrapper:setState] Using vsCodeApi.setState.');
 			return this.vsCodeApi.setState(newState)
 		} else {
+			console.log('[VSCodeAPIWrapper:setState] Using localStorage.setItem (browser mock).');
 			localStorage.setItem("vscodeState", JSON.stringify(newState))
 			return newState
 		}

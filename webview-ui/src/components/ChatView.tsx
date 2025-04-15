@@ -23,6 +23,7 @@ interface ChatViewProps {
 }
 // maybe instead of storing state in App, just make chatview  always show so dont conditionally load/unload? need to make sure messages are persisted (i remember seeing something about how webviews can be frozen in docs)
 const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideAnnouncement }: ChatViewProps) => {
+	console.log('[ChatView] Rendering ChatView component.');
 	//const task = messages.length > 0 ? (messages[0].say === "task" ? messages[0] : undefined) : undefined
 	const task = messages.length > 0 ? messages[0] : undefined // leaving this less safe version here since if the first message is not a task, then the extension is in a bad state and needs to be debugged (see ClaudeDev.abort)
 	const modifiedMessages = useMemo(() => combineApiRequests(combineCommandSequences(messages.slice(1))), [messages])
@@ -47,6 +48,7 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({})
 
 	const toggleRowExpansion = (ts: number) => {
+		console.log(`[debug] [ChatView:toggleRowExpansion] Toggling expansion for row timestamp: ${ts}`);
 		setExpandedRows((prev) => ({
 			...prev,
 			[ts]: !prev[ts],
@@ -54,6 +56,7 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	}
 
 	useEffect(() => {
+		console.log(`[debug] [ChatView:useEffect:vscodeThemeName] Theme changed to: ${vscodeThemeName}`);
 		if (!vscodeThemeName) return
 		const theme = getSyntaxHighlighterStyleFromTheme(vscodeThemeName)
 		if (theme) {
@@ -62,6 +65,7 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	}, [vscodeThemeName])
 
 	useEffect(() => {
+		console.log('[ChatView:useEffect:messages] Messages updated, processing last message.');
 		// if last message is an ask, show user ask UI
 
 		// if user finished a task, then start a new task with a new conversation history since in this moment that the extension is waiting for user response, the user could close the extension and the conversation history would be lost.
@@ -69,8 +73,10 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 
 		const lastMessage = messages.at(-1)
 		if (lastMessage) {
+			console.log(`[debug] [ChatView:useEffect:messages] Last message type: ${lastMessage.type}`);
 			switch (lastMessage.type) {
 				case "ask":
+					console.log(`[debug] [ChatView:useEffect:messages] Ask type: ${lastMessage.ask}`);
 					switch (lastMessage.ask) {
 						case "request_limit_reached":
 							setTextAreaDisabled(true)
@@ -126,6 +132,7 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 					break
 				case "say":
 					// don't want to reset since there could be a "say" after an "ask" while ask is waiting for response
+					console.log(`[debug] [ChatView:useEffect:messages] Say type: ${lastMessage.say}`);
 					switch (lastMessage.say) {
 						case "task":
 							break
@@ -145,6 +152,7 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 					break
 			}
 		} else {
+			console.log('[ChatView:useEffect:messages] No messages found.');
 			// this would get called after sending the first message, so we have to watch messages.length instead
 			// No messages, so user has to submit a task
 			// setTextAreaDisabled(false)
@@ -155,6 +163,7 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	}, [messages])
 
 	useEffect(() => {
+		console.log('[ChatView:useEffect:messages.length] Message count changed.');
 		if (messages.length === 0) {
 			setTextAreaDisabled(false)
 			setClaudeAsk(undefined)
@@ -165,11 +174,14 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	}, [messages.length])
 
 	const handleSendMessage = () => {
+	console.log('[ChatView:handleSendMessage] Attempting to send message.');
 		const text = inputValue.trim()
 		if (text) {
 			if (messages.length === 0) {
+				console.log(`[debug] [ChatView:handleSendMessage] Sending new task: ${text}`);
 				vscode.postMessage({ type: "newTask", text })
 			} else if (claudeAsk) {
+				console.log(`[debug] [ChatView:handleSendMessage] Sending ask response. Ask type: ${claudeAsk}, Text: ${text}`);
 				switch (claudeAsk) {
 					case "followup":
 					case "tool":
@@ -194,16 +206,19 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	This logic depends on the useEffect[messages] above to set claudeAsk, after which buttons are shown and we then send an askResponse to the extension.
 	*/
 	const handlePrimaryButtonClick = () => {
+	console.log(`[debug] [ChatView:handlePrimaryButtonClick] Primary button clicked. Current ask type: ${claudeAsk}`);
 		switch (claudeAsk) {
 			case "request_limit_reached":
 			case "api_req_failed":
 			case "command":
 			case "command_output":
 			case "tool":
+				console.log('[ChatView:handlePrimaryButtonClick] Sending yesButtonTapped response.');
 				vscode.postMessage({ type: "askResponse", askResponse: "yesButtonTapped" })
 				break
 			case "completion_result":
 				// extension waiting for feedback. but we can just present a new task button
+				console.log('[ChatView:handlePrimaryButtonClick] Starting new task.');
 				startNewTask()
 				break
 		}
@@ -215,14 +230,17 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	}
 
 	const handleSecondaryButtonClick = () => {
+	console.log(`[debug] [ChatView:handleSecondaryButtonClick] Secondary button clicked. Current ask type: ${claudeAsk}`);
 		switch (claudeAsk) {
 			case "request_limit_reached":
 			case "api_req_failed":
+				console.log('[ChatView:handleSecondaryButtonClick] Starting new task.');
 				startNewTask()
 				break
 			case "command":
 			case "tool":
 				// responds to the API with a "This operation failed" and lets it try again
+				console.log('[ChatView:handleSecondaryButtonClick] Sending noButtonTapped response.');
 				vscode.postMessage({ type: "askResponse", askResponse: "noButtonTapped" })
 				break
 		}
@@ -234,6 +252,7 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	}
 
 	const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+	console.log(`[debug] [ChatView:handleKeyDown] Key down event: ${event.key}`);
 		if (event.key === "Enter" && !event.shiftKey) {
 			event.preventDefault()
 			handleSendMessage()
@@ -241,20 +260,24 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	}
 
 	const handleTaskCloseButtonClick = () => {
+	console.log('[ChatView:handleTaskCloseButtonClick] Task close button clicked.');
 		startNewTask()
 	}
 
 	const startNewTask = () => {
+	console.log('[ChatView:startNewTask] Sending clearTask message.');
 		vscode.postMessage({ type: "clearTask" })
 	}
 
 	const handleMessage = useCallback(
 		(e: MessageEvent) => {
 			const message: ExtensionMessage = e.data
+			console.log(`[debug] [ChatView:handleMessage] Received message from extension: ${JSON.stringify(message)}`);
 			switch (message.type) {
 				case "action":
 					switch (message.action!) {
 						case "didBecomeVisible":
+						console.log('[ChatView:handleMessage] Action: didBecomeVisible. Focusing text area if appropriate.');
 							if (!isHidden && !textAreaDisabled && !enableButtons) {
 								textAreaRef.current?.focus()
 							}
@@ -270,11 +293,13 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	useEvent("message", handleMessage)
 
 	useMount(() => {
+	console.log('[ChatView:useMount] Component mounted, focusing text area.');
 		// NOTE: the vscode window needs to be focused for this to work
 		textAreaRef.current?.focus()
 	})
 
 	useEffect(() => {
+	console.log('[ChatView:useEffect:focus] Visibility/state changed, attempting to focus text area.');
 		const timer = setTimeout(() => {
 			if (!isHidden && !textAreaDisabled && !enableButtons) {
 				textAreaRef.current?.focus()
@@ -286,6 +311,7 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	}, [isHidden, textAreaDisabled, enableButtons])
 
 	const visibleMessages = useMemo(() => {
+		console.log('[ChatView:useMemo:visibleMessages] Calculating visible messages.');
 		return modifiedMessages.filter((message) => {
 			switch (message.ask) {
 				case "completion_result":
@@ -307,6 +333,7 @@ const ChatView = ({ messages, isHidden, vscodeThemeName, showAnnouncement, hideA
 	}, [modifiedMessages])
 
 	useEffect(() => {
+	console.log('[ChatView:useEffect:scroll] Visible messages updated, scrolling to bottom.');
 		// We use a setTimeout to ensure new content is rendered before scrolling to the bottom. virtuoso's followOutput would scroll to the bottom before the new content could render.
 		const timer = setTimeout(() => {
 			// TODO: we can use virtuoso's isAtBottom to prevent scrolling if user is scrolled up, and show a 'scroll to bottom' button for better UX
